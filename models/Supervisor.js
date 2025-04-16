@@ -1,29 +1,42 @@
-const mongoose = require('mongoose');
-const User = require('./User');
+const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
-// Base Supervisor Schema
 const supervisorSchema = new Schema({
-  department: { 
-    type: String, 
-    enum: ['quran', 'subjects'], 
-    required: true 
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
   },
-  subjects: [{ 
-    type: Schema.Types.ObjectId, 
-    ref: 'Subject' 
-  }],
-  joiningDate: { 
-    type: Date, 
-    default: Date.now 
-  }
+  department: {
+    type: String,
+    enum: ["quran", "subjects"],
+    required: true,
+  },
+  subjects: [
+    {
+      type: Schema.Types.ObjectId,
+      ref: "Subject",
+    },
+  ],
+  joiningDate: {
+    type: Date,
+    default: Date.now,
+  },
+  salary: {
+    type: Number,
+    required: true,
+  },
+  salaryHistory: [
+    {
+      month: { type: String },
+      amount: { type: Number },
+      bonusAmount: { type: Number, default: 0 },
+      paymentDate: { type: Date },
+      status: { type: String, enum: ["paid", "pending"] },
+      remarks: { type: String },
+      processedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    },
+  ],
 });
 
-// Create Supervisor models for both types using User discriminator
-const SupervisorQuran = User.discriminator('supervisor_quran', supervisorSchema);
-const SupervisorSubjects = User.discriminator('supervisor_subjects', supervisorSchema);
-
-module.exports = {
-  SupervisorQuran,
-  SupervisorSubjects
-};
+module.exports = mongoose.model("Supervisor", supervisorSchema);
