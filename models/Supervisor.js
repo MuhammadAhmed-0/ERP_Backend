@@ -7,17 +7,12 @@ const supervisorSchema = new Schema({
     ref: "User",
     required: true,
   },
+  name: { type: String },
   department: {
     type: String,
     enum: ["quran", "subjects"],
     required: true,
   },
-  subjects: [
-    {
-      type: Schema.Types.ObjectId,
-      ref: "Subject",
-    },
-  ],
   joiningDate: {
     type: Date,
     default: Date.now,

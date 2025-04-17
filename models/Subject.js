@@ -13,7 +13,7 @@ const subjectSchema = new Schema(
     },
     type: {
       type: String,
-      enum: ["quran", "academic"],
+      enum: ["quran", "subjects"],
       required: true,
     },
     createdBy: {

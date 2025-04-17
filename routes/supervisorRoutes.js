@@ -70,10 +70,18 @@ router.get(
   supervisorController.getSubjectTeachersForSupervisor
 );
 
+
 router.get(
-  "/students",
+  "/students/quran",
   auth,
-  checkRole("supervisor_quran", "supervisor_subjects"),
-  supervisorController.getAllStudentsForSupervisors
+  checkRole("supervisor_quran"),
+  supervisorController.getStudentsForQuranSupervisor
+);
+
+router.get(
+  "/students/subjects",
+  auth,
+  checkRole("supervisor_subjects"),
+  supervisorController.getStudentsForSubjectSupervisor
 );
 module.exports = router;

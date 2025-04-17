@@ -4,18 +4,22 @@ const { validationResult } = require("express-validator");
 const bcrypt = require("bcryptjs");
 const Student = require("../models/Student");
 const Teacher = require("../models/Teacher");
+const Subject = require("../models/Subject");
 const Supervisor = require("../models/Supervisor");
 const Client = require("../models/Client");
 const SalaryInvoice = require("../models/SalaryInvoice");
+const mongoose = require("mongoose");
 
 exports.addUser = async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ msg: "Access denied. Admins only." });
   }
+
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
+
   const { name, email, password, gender, role, ...rest } = req.body;
 
   try {
@@ -25,7 +29,8 @@ exports.addUser = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({
+
+    const newUser = new User({
       name,
       email,
       password: hashedPassword,
@@ -34,61 +39,154 @@ exports.addUser = async (req, res) => {
       createdBy: req.user.id,
     });
 
-    await user.save();
+    if (
+      ["student", "teacher_quran", "teacher_subjects"].includes(role) &&
+      rest.subjects?.length
+    ) {
+      const areValidSubjectIds = rest.subjects.every((id) =>
+        mongoose.Types.ObjectId.isValid(id)
+      );
+
+      if (!areValidSubjectIds) {
+        return res.status(400).json({
+          msg: "One or more subject IDs are invalid format.",
+        });
+      }
+
+      const validSubjects = await Subject.find({ _id: { $in: rest.subjects } });
+      if (validSubjects.length !== rest.subjects.length) {
+        return res.status(400).json({
+          msg: "One or more subject IDs do not exist in database.",
+        });
+      }
+
+      rest.subjects = validSubjects.map((subj) => ({
+        _id: subj._id,
+        name: subj.name,
+      }));
+    }
+
+    let newStudent = null;
+    let newTeacher = null;
+    let newSupervisor = null;
+
+    // ===== STUDENT =====
     if (role === "student") {
-      const student = new Student({
-        user: user._id,
+      if (rest.assignedTeachers?.length) {
+        const subjectIdsInAssignments = rest.assignedTeachers.map(
+          (a) => a.subject
+        );
+
+        const areValidAssignedSubjectIds = subjectIdsInAssignments.every((id) =>
+          mongoose.Types.ObjectId.isValid(id)
+        );
+
+        if (!areValidAssignedSubjectIds) {
+          return res.status(400).json({
+            msg: "One or more subject IDs in assignedTeachers are invalid format.",
+          });
+        }
+
+        const validSubjects = await Subject.find({
+          _id: { $in: subjectIdsInAssignments },
+        });
+
+        if (validSubjects.length !== subjectIdsInAssignments.length) {
+          return res.status(400).json({
+            msg: "One or more subject IDs in assignedTeachers do not exist.",
+          });
+        }
+
+        for (const assignment of rest.assignedTeachers) {
+          if (!mongoose.Types.ObjectId.isValid(assignment.teacher)) {
+            return res.status(400).json({
+              msg: `Invalid teacher ID format: ${assignment.teacher}`,
+            });
+          }
+
+          const teacher = await Teacher.findOne({ user: assignment.teacher });
+          const teacherUser = await User.findById(assignment.teacher);
+
+          if (!teacher || !teacherUser) {
+            return res.status(400).json({
+              msg: `Assigned teacher with ID ${assignment.teacher} not found.`,
+            });
+          }
+
+          const teachesSubject = teacher.subjects.some(
+            (subj) => subj._id.toString() === assignment.subject.toString()
+          );
+
+          if (!teachesSubject) {
+            return res.status(400).json({
+              msg: `Teacher (${assignment.teacher}) is not assigned to subject (${assignment.subject}).`,
+            });
+          }
+
+          const subjectData = validSubjects.find(
+            (subj) => subj._id.toString() === assignment.subject.toString()
+          );
+
+          assignment.subject = {
+            _id: subjectData._id,
+            name: subjectData.name,
+          };
+
+          assignment.teacher = {
+            _id: teacherUser._id,
+            name: teacherUser.name,
+          };
+        }
+      }
+
+      newStudent = new Student({
+        user: newUser._id,
+        name,
         ...rest,
       });
-
-      await student.save();
-
-      return res.status(201).json({
-        msg: "Student user created successfully",
-        user,
-        student,
-      });
     }
+
+    // ===== TEACHER =====
     if (role === "teacher_quran" || role === "teacher_subjects") {
       const department = role.includes("quran") ? "quran" : "subjects";
-      const teacher = new Teacher({
-        user: user._id,
+
+      newTeacher = new Teacher({
+        user: newUser._id,
+        name,
         department,
         ...rest,
       });
-
-      await teacher.save();
-
-      return res.status(201).json({
-        msg: "Teacher user created successfully",
-        user,
-        teacher,
-      });
     }
+
+    // ===== SUPERVISOR =====
     if (role === "supervisor_quran" || role === "supervisor_subjects") {
       const department = role.includes("quran") ? "quran" : "subjects";
 
-      const supervisor = new Supervisor({
-        user: user._id,
+      newSupervisor = new Supervisor({
+        user: newUser._id,
+        name,
         department,
         ...rest,
       });
-
-      await supervisor.save();
-
-      return res.status(201).json({
-        msg: "Supervisor user created successfully",
-        user,
-        supervisor,
-      });
     }
+
+    await newUser.save();
+    if (newStudent) await newStudent.save();
+    if (newTeacher) await newTeacher.save();
+    if (newSupervisor) await newSupervisor.save();
+
     return res.status(201).json({
-      msg: "User created successfully",
-      user,
+      msg: `${
+        role.charAt(0).toUpperCase() + role.slice(1)
+      } user created successfully`,
+      user: newUser,
+      student: newStudent,
+      teacher: newTeacher,
+      supervisor: newSupervisor,
     });
   } catch (err) {
     console.error("Error in addUser:", err.message);
-    res.status(500).json({ msg: "Server error while creating user" });
+    return res.status(500).json({ msg: "Server error while creating user" });
   }
 };
 
@@ -469,7 +567,7 @@ exports.generateSalaryInvoice = async (req, res) => {
 
     let role = user.role;
 
-    if (role === "teacher") {
+    if (role === "teacher_quran" || role == "teacher_subjects") {
       const teacher = await Teacher.findOne({ user: userId });
       if (!teacher) {
         return res.status(404).json({ msg: "Teacher profile not found" });

@@ -3,6 +3,7 @@ const Student = require("../models/Student");
 const Teacher = require("../models/Teacher");
 const ClassHistory = require("../models/ClassHistory");
 const User = require("../models/User");
+const Subject = require("../models/Subject");
 
 exports.getQuranTeachersForSupervisor = async (req, res) => {
   try {
@@ -37,6 +38,7 @@ exports.getQuranTeachersForSupervisor = async (req, res) => {
     res.status(500).json({ msg: "Server error while fetching Quran teachers" });
   }
 };
+
 exports.getSubjectTeachersForSupervisor = async (req, res) => {
   try {
     if (req.user.role !== "supervisor_subjects") {
@@ -73,11 +75,9 @@ exports.getSubjectTeachersForSupervisor = async (req, res) => {
   }
 };
 
-exports.getAllStudentsForSupervisors = async (req, res) => {
+exports.getStudentsForQuranSupervisor = async (req, res) => {
   try {
-    const allowedRoles = ["supervisor_quran", "supervisor_subjects"];
-
-    if (!allowedRoles.includes(req.user.role)) {
+    if (req.user.role !== "supervisor_quran") {
       return res.status(403).json({ msg: "Access denied" });
     }
 
@@ -89,173 +89,108 @@ exports.getAllStudentsForSupervisors = async (req, res) => {
 
     for (const user of users) {
       const studentProfile = await Student.findOne({ user: user._id }).lean();
-      if (studentProfile) {
-        const { feeHistory, guardianContact, ...safeProfile } = studentProfile;
-        result.push({
-          ...user.toObject(),
-          profile: safeProfile,
-        });
-      }
+      if (!studentProfile) continue;
+
+      const subjectIds = studentProfile.subjects.map((s) => s._id || s);
+      const allSubjects = await Subject.find({ _id: { $in: subjectIds } });
+
+      const quranSubjects = allSubjects.filter((s) => s.type === "quran");
+      if (quranSubjects.length === 0) continue;
+
+      const quranSubjectIds = quranSubjects.map((s) => s._id.toString());
+
+      const { guardianContact, feeHistory, ...safeProfile } = studentProfile;
+
+      const filteredSubjects = studentProfile.subjects.filter((s) =>
+        quranSubjectIds.includes((s._id || s).toString())
+      );
+
+      const filteredTeachers = (studentProfile.assignedTeachers || []).filter(
+        (teacher) =>
+          teacher.subject &&
+          quranSubjectIds.includes(
+            (teacher.subject._id || teacher.subject).toString()
+          )
+      );
+
+      result.push({
+        ...user.toObject(),
+        profile: {
+          ...safeProfile,
+          subjects: filteredSubjects,
+          assignedTeachers: filteredTeachers,
+          subjectsDetails: quranSubjects,
+        },
+      });
     }
 
     res.status(200).json({
-      msg: "All students for supervisors",
+      msg: "Students for Quran supervisor",
       count: result.length,
       users: result,
     });
   } catch (err) {
-    console.error("getAllStudentsForSupervisors error:", err.message);
+    console.error("getStudentsForQuranSupervisor error:", err.message);
     res.status(500).json({ msg: "Server error while fetching students" });
   }
 };
 
-// exports.getAllTeachersForSupervisor = async (req, res) => {
-//   try {
-//     if (!["supervisor_quran", "supervisor_subjects"].includes(req.user.role)) {
-//       return res.status(403).json({ msg: "Access denied" });
-//     }
+exports.getStudentsForSubjectSupervisor = async (req, res) => {
+  try {
+    if (req.user.role !== "supervisor_subjects") {
+      return res.status(403).json({ msg: "Access denied" });
+    }
 
-//     const teachers = await User.find({ role: "teacher" }).select(
-//       "name role gender profilePicture"
-//     );
+    const users = await User.find({ role: "student" }).select(
+      "name role gender profilePicture"
+    );
 
-//     const result = [];
+    const result = [];
 
-//     for (const user of teachers) {
-//       const teacherProfile = await Teacher.findOne({ user: user._id }).lean();
+    for (const user of users) {
+      const studentProfile = await Student.findOne({ user: user._id }).lean();
+      if (!studentProfile) continue;
 
-//       if (teacherProfile) {
-//         const { salary, salaryHistory, ...safeProfile } = teacherProfile;
-//         result.push({
-//           ...user.toObject(),
-//           profile: safeProfile,
-//         });
-//       }
-//     }
+      const subjectIds = studentProfile.subjects.map((s) => s._id || s);
+      const allSubjects = await Subject.find({ _id: { $in: subjectIds } });
 
-//     res.status(200).json({
-//       count: result.length,
-//       users: result,
-//     });
-//   } catch (err) {
-//     console.error("getAllTeachersForSupervisor error:", err.message);
-//     res.status(500).json({ msg: "Server error while fetching teachers" });
-//   }
-// };
+      const subjectSubjects = allSubjects.filter((s) => s.type === "subjects");
+      if (subjectSubjects.length === 0) continue;
 
-// exports.getAllStudentsForSupervisor = async (req, res) => {
-//   try {
-//     if (!["supervisor_quran", "supervisor_subjects"].includes(req.user.role)) {
-//       return res.status(403).json({ msg: "Access denied" });
-//     }
+      const subjectIdsOnly = subjectSubjects.map((s) => s._id.toString());
 
-//     const students = await User.find({ role: "student" }).select(
-//       "name role gender profilePicture"
-//     );
+      const { guardianContact, feeHistory, ...safeProfile } = studentProfile;
 
-//     const result = [];
+      const filteredSubjects = studentProfile.subjects.filter((s) =>
+        subjectIdsOnly.includes((s._id || s).toString())
+      );
 
-//     for (const user of students) {
-//       const studentProfile = await Student.findOne({ user: user._id }).lean();
+      const filteredTeachers = (studentProfile.assignedTeachers || []).filter(
+        (teacher) =>
+          teacher.subject &&
+          subjectIdsOnly.includes(
+            (teacher.subject._id || teacher.subject).toString()
+          )
+      );
 
-//       if (studentProfile) {
-//         const { feeHistory, guardianContact, ...safeProfile } = studentProfile;
-//         result.push({
-//           ...user.toObject(),
-//           profile: safeProfile,
-//         });
-//       }
-//     }
+      result.push({
+        ...user.toObject(),
+        profile: {
+          ...safeProfile,
+          subjects: filteredSubjects,
+          assignedTeachers: filteredTeachers,
+          subjectsDetails: subjectSubjects,
+        },
+      });
+    }
 
-//     res.status(200).json({
-//       count: result.length,
-//       users: result,
-//     });
-//   } catch (err) {
-//     console.error("getAllStudentsForSupervisor error:", err.message);
-//     res.status(500).json({ msg: "Server error while fetching students" });
-//   }
-// };
-
-// exports.getSchedule = async (req, res) => {
-//   try {
-//     const schedules = await Schedule.find().populate([
-//       "student",
-//       "teacher",
-//       "subject",
-//     ]);
-//     res.json(schedules);
-//   } catch (err) {
-//     res.status(500).send("Server Error");
-//   }
-// };
-
-// exports.createSchedule = async (req, res) => {
-//   try {
-//     const schedule = new Schedule(req.body);
-//     await schedule.save();
-//     res.json(schedule);
-//   } catch (err) {
-//     res.status(500).send("Server Error");
-//   }
-// };
-
-// exports.updateSchedule = async (req, res) => {
-//   try {
-//     const schedule = await Schedule.findByIdAndUpdate(req.params.id, req.body, {
-//       new: true,
-//     });
-//     res.json(schedule);
-//   } catch (err) {
-//     res.status(500).send("Server Error");
-//   }
-// };
-
-// exports.deleteSchedule = async (req, res) => {
-//   try {
-//     await Schedule.findByIdAndDelete(req.params.id);
-//     res.json({ msg: "Schedule removed" });
-//   } catch (err) {
-//     res.status(500).send("Server Error");
-//   }
-// };
-
-// exports.getAllStudents = async (req, res) => {
-//   try {
-//     const students = await Student.find().select("-password -sensitiveData");
-//     res.json(students);
-//   } catch (err) {
-//     res.status(500).send("Server Error");
-//   }
-// };
-
-// exports.getAllTeachers = async (req, res) => {
-//   try {
-//     const teachers = await Teacher.find().select("-password -sensitiveData");
-//     res.json(teachers);
-//   } catch (err) {
-//     res.status(500).send("Server Error");
-//   }
-// };
-
-// exports.getTeachersAttendance = async (req, res) => {
-//   try {
-//     const attendance = await ClassHistory.find().populate("teacher");
-//     res.json(attendance);
-//   } catch (err) {
-//     res.status(500).send("Server Error");
-//   }
-// };
-
-// exports.getClassesStatus = async (req, res) => {
-//   try {
-//     const status = await ClassHistory.find().populate([
-//       "schedule",
-//       "teacher",
-//       "student",
-//     ]);
-//     res.json(status);
-//   } catch (err) {
-//     res.status(500).send("Server Error");
-//   }
-// };
+    res.status(200).json({
+      msg: "Students for Subject supervisor",
+      count: result.length,
+      users: result,
+    });
+  } catch (err) {
+    console.error("getStudentsForSubjectSupervisor error:", err.message);
+    res.status(500).json({ msg: "Server error while fetching students" });
+  }
+};

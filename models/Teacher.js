@@ -8,6 +8,7 @@ const teacherSchema = new Schema({
     ref: "User",
     required: true,
   },
+  name: { type: String },
   department: {
     type: String,
     enum: ["quran", "subjects"],
@@ -27,8 +28,8 @@ const teacherSchema = new Schema({
   ],
   subjects: [
     {
-      type: Schema.Types.ObjectId,
-      ref: "Subject",
+      _id: { type: Schema.Types.ObjectId, ref: "Subject" },
+      name: { type: String },
     },
   ],
   salary: {

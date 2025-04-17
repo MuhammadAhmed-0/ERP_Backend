@@ -8,6 +8,7 @@ const studentSchema = new Schema({
     ref: "User",
     required: true,
   },
+  name: { type: String },
   guardianName: { type: String, required: true },
   guardianContact: { type: String, required: true },
   dateOfBirth: { type: Date },
@@ -18,11 +19,17 @@ const studentSchema = new Schema({
   subjects: [{ type: Schema.Types.ObjectId, ref: "Subject" }],
   assignedTeachers: [
     {
-      teacher: { type: Schema.Types.ObjectId, ref: "User" },
-      subject: { type: Schema.Types.ObjectId, ref: "Subject" },
+      teacher: {
+        _id: { type: Schema.Types.ObjectId, ref: "User" },
+        name: String,
+      },
+      subject: {
+        _id: { type: Schema.Types.ObjectId, ref: "Subject" },
+        name: String,
+      },
       isTemporary: { type: Boolean, default: false },
-      startDate: { type: Date, default: Date.now },
-      endDate: { type: Date },
+      startDate: Date,
+      endDate: Date,
       assignedBy: { type: Schema.Types.ObjectId, ref: "User" },
       assignedAt: { type: Date, default: Date.now },
     },
