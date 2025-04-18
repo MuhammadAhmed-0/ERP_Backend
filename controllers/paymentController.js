@@ -38,7 +38,7 @@ exports.getOwnChallans = async (req, res) => {
 exports.getAllChallans = async (req, res) => {
   try {
     const userRole = req.user.role;
-    const { studentId } = req.query;
+    const { studentId, status, month } = req.query;
 
     if (userRole !== "admin") {
       return res.status(403).json({ msg: "Only admin can access this route" });
@@ -64,11 +64,21 @@ exports.getAllChallans = async (req, res) => {
       filter.student = studentId;
     }
 
+    if (status) {
+      filter.status = status;
+    }
+
+    if (month) {
+      filter.month = month;
+    }
+
     const challans = await FeeChalan.find(filter)
       .populate("student", "name email")
       .sort({ status: 1, issueDate: -1 });
+
     res.status(200).json({
       msg: "All challans fetched successfully",
+      count: challans.length,
       challans,
     });
   } catch (err) {
@@ -117,6 +127,7 @@ exports.getAllSalaryInvoices = async (req, res) => {
 
     res.status(200).json({
       msg: "All salary invoices fetched successfully",
+      count: invoices.length,
       invoices,
     });
   } catch (err) {
@@ -126,7 +137,6 @@ exports.getAllSalaryInvoices = async (req, res) => {
       .json({ msg: "Server error while fetching salary invoices" });
   }
 };
-
 
 exports.getOwnSalaryInvoices = async (req, res) => {
   try {
@@ -150,7 +160,7 @@ exports.getOwnSalaryInvoices = async (req, res) => {
       user: userId,
       role: userRole,
     })
-      .populate("processedBy", "name email role") 
+      .populate("processedBy", "name email role")
       .sort({ paymentDate: -1 });
 
     res.status(200).json({

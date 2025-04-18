@@ -8,6 +8,10 @@ const salaryInvoiceSchema = new Schema(
       ref: "User",
       required: true,
     },
+    userName: {
+      type: String,
+      required: true,
+    },
     role: {
       type: String,
       enum: [

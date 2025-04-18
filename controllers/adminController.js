@@ -463,6 +463,7 @@ exports.generateFeeChallan = async (req, res) => {
 
     const challan = new FeeChalan({
       student: user._id,
+      studentName: student.name,
       amount,
       month,
       dueDate,
@@ -470,7 +471,7 @@ exports.generateFeeChallan = async (req, res) => {
       status: "pending",
       issuedBy: req.user?.id || null,
     });
-
+    console.log(student.name);
     await challan.save();
 
     student.feeHistory.push({
@@ -606,6 +607,7 @@ exports.generateSalaryInvoice = async (req, res) => {
 
     const salaryInvoice = new SalaryInvoice({
       user: userId,
+      userName: user.name,
       role,
       amount,
       bonus: {
